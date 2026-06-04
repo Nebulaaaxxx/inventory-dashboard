@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 type InventoryItem = {
@@ -17,6 +17,69 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState("");
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("inventory_item_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "inventory_item",
+        },
+        (payload) => {
+          if (payload.eventType === "UPDATE") {
+            const updatedItem = payload.new as InventoryItem;
+
+            setLocalItems((currentItems) =>
+              currentItems.map((item) =>
+                item.id === updatedItem.id ? updatedItem : item
+              )
+            );
+
+            setSelectedItem((currentSelectedItem) =>
+              currentSelectedItem?.id === updatedItem.id
+                ? updatedItem
+                : currentSelectedItem
+            );
+          }
+
+          if (payload.eventType === "INSERT") {
+            const newItem = payload.new as InventoryItem;
+
+            setLocalItems((currentItems) => {
+              const alreadyExists = currentItems.some(
+                (item) => item.id === newItem.id
+              );
+
+              if (alreadyExists) return currentItems;
+
+              return [...currentItems, newItem].sort((a, b) => a.id - b.id);
+            });
+          }
+
+          if (payload.eventType === "DELETE") {
+            const deletedItem = payload.old as InventoryItem;
+
+            setLocalItems((currentItems) =>
+              currentItems.filter((item) => item.id !== deletedItem.id)
+            );
+
+            setSelectedItem((currentSelectedItem) =>
+              currentSelectedItem?.id === deletedItem.id
+                ? null
+                : currentSelectedItem
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const totalProducts = localItems.length;
 
