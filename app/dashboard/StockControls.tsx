@@ -165,7 +165,7 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
   return (
     <main style={pageStyle}>
       <section style={topHeaderStyle}>
-        <p style={smallTextStyle}>Supabase Dashboard</p>
+        <p style={smallTextStyle}>ALPS2LA Dashboard</p>
         <h1 style={titleStyle}>Event Inventory</h1>
         <p style={subtitleStyle}>
           Track sponsored products, stock received, and remaining inventory.
