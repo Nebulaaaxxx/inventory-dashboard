@@ -17,10 +17,11 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState("");
+  const [stockChangeAmount, setStockChangeAmount] = useState("1");
 
   useEffect(() => {
     const channel = supabase
-      .channel("inventory_item_changes")
+      .channel("inventory_item_realtime")
       .on(
         "postgres_changes",
         {
@@ -38,10 +39,10 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
               )
             );
 
-            setSelectedItem((currentSelectedItem) =>
-              currentSelectedItem?.id === updatedItem.id
+            setSelectedItem((currentSelected) =>
+              currentSelected?.id === updatedItem.id
                 ? updatedItem
-                : currentSelectedItem
+                : currentSelected
             );
           }
 
@@ -49,11 +50,8 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
             const newItem = payload.new as InventoryItem;
 
             setLocalItems((currentItems) => {
-              const alreadyExists = currentItems.some(
-                (item) => item.id === newItem.id
-              );
-
-              if (alreadyExists) return currentItems;
+              const exists = currentItems.some((item) => item.id === newItem.id);
+              if (exists) return currentItems;
 
               return [...currentItems, newItem].sort((a, b) => a.id - b.id);
             });
@@ -66,10 +64,8 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
               currentItems.filter((item) => item.id !== deletedItem.id)
             );
 
-            setSelectedItem((currentSelectedItem) =>
-              currentSelectedItem?.id === deletedItem.id
-                ? null
-                : currentSelectedItem
+            setSelectedItem((currentSelected) =>
+              currentSelected?.id === deletedItem.id ? null : currentSelected
             );
           }
         }
@@ -110,27 +106,24 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
     );
   });
 
-  async function updateStock(change: number) {
+  async function updateStock(direction: "add" | "subtract") {
     if (!selectedItem) return;
 
-    const newQuantity = selectedItem.quantity_remaining + change;
+    const amount = Number(stockChangeAmount);
 
-    if (newQuantity < 0) {
-      alert("Quantity cannot go below 0");
+    if (!amount || amount <= 0) {
+      alert("Please enter a number bigger than 0");
       return;
     }
 
-    if (newQuantity > selectedItem.quantity_received) {
-      alert("Remaining quantity cannot be more than received quantity");
-      return;
-    }
+    const change = direction === "add" ? amount : -amount;
 
     setLoading(true);
 
-    const { error } = await supabase
-      .from("inventory_item")
-      .update({ quantity_remaining: newQuantity })
-      .eq("id", selectedItem.id);
+    const { data, error } = await supabase.rpc("adjust_inventory_quantity", {
+      item_id: selectedItem.id,
+      change_amount: change,
+    });
 
     if (error) {
       alert("Update failed: " + error.message);
@@ -138,16 +131,13 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
       return;
     }
 
-    const updatedItem = {
-      ...selectedItem,
-      quantity_remaining: newQuantity,
-    };
+    const updatedItem = data as InventoryItem;
 
     setSelectedItem(updatedItem);
 
     setLocalItems((currentItems) =>
       currentItems.map((item) =>
-        item.id === selectedItem.id ? updatedItem : item
+        item.id === updatedItem.id ? updatedItem : item
       )
     );
 
@@ -195,7 +185,7 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
           <div>
             <h2 style={sectionTitleStyle}>Inventory Items</h2>
             <p style={sectionSubtitleStyle}>
-              Search an item, click it, then use the +1 or -1 button.
+              Search an item, click it, then type a number and use + or -.
             </p>
           </div>
 
@@ -306,19 +296,27 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
 
           <div style={buttonGroupStyle}>
             <button
-              onClick={() => updateStock(-1)}
+              onClick={() => updateStock("subtract")}
               disabled={loading}
               style={minusButtonStyle}
             >
-              -1
+              -
             </button>
 
+            <input
+              type="number"
+              min="1"
+              value={stockChangeAmount}
+              onChange={(event) => setStockChangeAmount(event.target.value)}
+              style={stockInputStyle}
+            />
+
             <button
-              onClick={() => updateStock(1)}
+              onClick={() => updateStock("add")}
               disabled={loading}
               style={plusButtonStyle}
             >
-              +1
+              +
             </button>
           </div>
         </div>
@@ -559,29 +557,43 @@ const selectedInfoStyle = {
 
 const buttonGroupStyle = {
   display: "flex",
-  gap: "20px",
+  gap: "16px",
+  alignItems: "center",
+};
+
+const stockInputStyle = {
+  width: "110px",
+  height: "60px",
+  borderRadius: "18px",
+  border: "1px solid #374151",
+  backgroundColor: "#ffffff",
+  color: "#111827",
+  fontSize: "24px",
+  fontWeight: "bold",
+  textAlign: "center" as const,
+  outline: "none",
 };
 
 const minusButtonStyle = {
-  width: "150px",
+  width: "120px",
   height: "60px",
   borderRadius: "999px",
   border: "none",
   backgroundColor: "#ef4444",
   color: "white",
-  fontSize: "26px",
+  fontSize: "30px",
   fontWeight: "bold",
   cursor: "pointer",
 };
 
 const plusButtonStyle = {
-  width: "150px",
+  width: "120px",
   height: "60px",
   borderRadius: "999px",
   border: "none",
   backgroundColor: "#2563eb",
   color: "white",
-  fontSize: "26px",
+  fontSize: "30px",
   fontWeight: "bold",
   cursor: "pointer",
 };
