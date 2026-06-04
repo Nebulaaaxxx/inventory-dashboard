@@ -53,7 +53,7 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
               const exists = currentItems.some((item) => item.id === newItem.id);
               if (exists) return currentItems;
 
-              return [...currentItems, newItem].sort((a, b) => a.id - b.id);
+              return [...currentItems, newItem].sort(sortInventoryItems);
             });
           }
 
@@ -77,6 +77,22 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
     };
   }, []);
 
+  function sortInventoryItems(a: InventoryItem, b: InventoryItem) {
+    const sponsorCompare = a.sponsor.localeCompare(b.sponsor);
+
+    if (sponsorCompare !== 0) {
+      return sponsorCompare;
+    }
+
+    const categoryCompare = a.category.localeCompare(b.category);
+
+    if (categoryCompare !== 0) {
+      return categoryCompare;
+    }
+
+    return a.product_name.localeCompare(b.product_name);
+  }
+
   const totalProducts = localItems.length;
 
   const totalQuantityRemaining = localItems.reduce((sum, item) => {
@@ -96,15 +112,17 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
     return remaining < received * 0.5;
   });
 
-  const filteredItems = localItems.filter((item) => {
-    const search = searchText.toLowerCase();
+  const filteredItems = localItems
+    .filter((item) => {
+      const search = searchText.toLowerCase();
 
-    return (
-      item.product_name.toLowerCase().includes(search) ||
-      item.sponsor.toLowerCase().includes(search) ||
-      item.category.toLowerCase().includes(search)
-    );
-  });
+      return (
+        item.product_name.toLowerCase().includes(search) ||
+        item.sponsor.toLowerCase().includes(search) ||
+        item.category.toLowerCase().includes(search)
+      );
+    })
+    .sort(sortInventoryItems);
 
   async function updateStock(direction: "add" | "subtract") {
     if (!selectedItem) return;
@@ -185,7 +203,7 @@ export default function StockControls({ items }: { items: InventoryItem[] }) {
           <div>
             <h2 style={sectionTitleStyle}>Inventory Items</h2>
             <p style={sectionSubtitleStyle}>
-              Search an item, click it, then type a number and use + or -.
+              Items are sorted by sponsor, category, then product name.
             </p>
           </div>
 
